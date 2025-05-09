@@ -126,12 +126,16 @@ class ToxicityDataset(Dataset):
 @st.cache_resource(ttl=3600)
 def load_model(target_label, device):
     try:
-        model = torch.load(target_label + ".pth", map_location=device, weights_only=False)
+        model_path = os.path.join('assets', target_label + ".pth")
+        logger = logging.getLogger(__name__)
+        model = torch.load(model_path, map_location=device, weights_only=False)
         model.eval()
+        logger.info(f"Successfully loaded model for {target_label} classification")
+        return model
     except Exception as e:
+        logger.error(f"Failed to load model: {e}")
         st.error(f"Could not load pretrained model: {e}. Please train the model first.")
-        return
-    return model
+        return None
 
 def main():
     # Set up logging
@@ -320,7 +324,9 @@ def main():
 
                 st.success("Training completed!")
                 if save_model_to_disk:
-                    torch.save(model, target_label + ".pth")
+                    os.makedirs('assets', exist_ok=True)
+                    model_path = os.path.join('assets', target_label + ".pth")
+                    torch.save(model, model_path)
                     st.success("Model saved to disk.")
 
                 # Show prediction probabilities on 5 target_label samples and 5 non-target_label samples
@@ -351,15 +357,19 @@ def main():
         target_label = st.selectbox("Target Label", options=['toxic', 'severe_toxic', 'obscene', 'identity_hate', 'insult', 'threat'], index=0, key="target_label_predict")
         
         # Check if model file exists before trying to load it
-        model_path = target_label + ".pth"
+        model_path = os.path.join('assets', target_label + ".pth")
+        logger.info(f"Checking for model at {model_path}")
         if not os.path.exists(model_path):
+            logger.warning(f"No model file found at {model_path}")
             st.error(f"No trained model found for '{target_label}'. Please: \n1. Go to the Train tab\n2. Select '{target_label}' from the Target Label dropdown\n3. Check 'Save Model to Disk'\n4. Click 'Train Model'")
             st.stop()
             
         with st.spinner("Loading model..."):
             model = load_model(target_label, device)
             if model is None:
+                logger.error("Model loading returned None")
                 st.stop()
+            logger.info(f"Model loaded successfully, device: {next(model.parameters()).device}")
         user_comment = st.text_area("Enter your comment here:", height=100, key="predict_text")
         predict_button = st.button("Predict Toxicity", key="predict_button")
        
