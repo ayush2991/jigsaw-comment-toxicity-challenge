@@ -157,7 +157,7 @@ def main():
                 st.experimental_rerun()
             st.subheader("Model Parameters")
             use_gpu = st.checkbox("Use GPU (if available)", value=True, key="use_gpu")
-            quick_training_mode = st.checkbox("Quick Training Mode", value=False, key="quick_training")
+            quick_training_mode = st.checkbox("Dummy training mode", value=False, key="quick_training")
             save_model_to_disk = st.checkbox("Save Model to Disk", value=False, key="save_model")
             if use_gpu:
                 if not torch.cuda.is_available():
@@ -315,7 +315,7 @@ def main():
                             status_placeholder.text(status_message)
                             logger.info(status_message)
 
-                        if quick_training_mode and batch_idx >= 10:
+                        if quick_training_mode and batch_idx >= 50:
                             break
 
                 st.success("Training completed!")
