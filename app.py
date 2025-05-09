@@ -10,6 +10,7 @@ from sklearn.model_selection import train_test_split
 import re
 from collections import Counter
 import altair as alt
+import os
 
 @st.cache_resource
 def create_vocabulary(texts, min_freq=2):
@@ -346,13 +347,19 @@ def main():
                 
 
     with tab_predict:
+        st.subheader("Predict Toxicity for Your Comment")
+        target_label = st.selectbox("Target Label", options=['toxic', 'severe_toxic', 'obscene', 'identity_hate', 'insult', 'threat'], index=0, key="target_label_predict")
+        
+        # Check if model file exists before trying to load it
+        model_path = target_label + ".pth"
+        if not os.path.exists(model_path):
+            st.error(f"No trained model found for '{target_label}'. Please: \n1. Go to the Train tab\n2. Select '{target_label}' from the Target Label dropdown\n3. Check 'Save Model to Disk'\n4. Click 'Train Model'")
+            st.stop()
+            
         with st.spinner("Loading model..."):
             model = load_model(target_label, device)
             if model is None:
                 st.stop()
-            
-        st.subheader("Predict Toxicity for Your Comment")
-        target_label = st.selectbox("Target Label", options=['toxic', 'severe_toxic', 'obscene', 'identity_hate', 'insult', 'threat'], index=0, key="target_label_predict")
         user_comment = st.text_area("Enter your comment here:", height=100, key="predict_text")
         predict_button = st.button("Predict Toxicity", key="predict_button")
        
