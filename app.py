@@ -125,11 +125,10 @@ class ToxicityDataset(Dataset):
 @st.cache_resource(ttl=3600)
 def load_model(target_label, device):
     try:
-        model = torch.load(target_label + ".pth", map_location=device)
+        model = torch.load(target_label + ".pth", map_location=device, weights_only=False)
         model.eval()
-        st.success("Pretrained model loaded successfully.")
     except Exception as e:
-        st.error(f"Could not load pretrained model: {e}")
+        st.error(f"Could not load pretrained model: {e}. Please train the model first.")
         return
     return model
 
@@ -157,6 +156,7 @@ def main():
                 st.experimental_rerun()
             st.subheader("Model Parameters")
             use_gpu = st.checkbox("Use GPU (if available)", value=True, key="use_gpu")
+            quick_training_mode = st.checkbox("Quick Training Mode", value=False, key="quick_training")
             save_model_to_disk = st.checkbox("Save Model to Disk", value=False, key="save_model")
             if use_gpu:
                 if not torch.cuda.is_available():
@@ -314,38 +314,85 @@ def main():
                             status_placeholder.text(status_message)
                             logger.info(status_message)
 
+                        if quick_training_mode and batch_idx >= 10:
+                            break
+
                 st.success("Training completed!")
                 if save_model_to_disk:
                     torch.save(model, target_label + ".pth")
                     st.success("Model saved to disk.")
 
+                # Show prediction probabilities on 5 target_label samples and 5 non-target_label samples
+                st.subheader("Sample Predictions")
+                sample_data = pd.concat([val_data[val_data[target_label] == 1].sample(5, random_state=42),
+                                        val_data[val_data[target_label] == 0].sample(5, random_state=42)])
+                sample_data['predicted'] = 0.0
+                for i, row in sample_data.iterrows():
+                    comment = row['comment_text']
+                    tokens = vocab.tokenize(comment)
+                    if len(tokens) > max_seq_len_val:
+                        tokens = tokens[:max_seq_len_val]
+                    else:
+                        tokens = tokens + [vocab.special_tokens[0]] * (max_seq_len_val - len(tokens))
+                    indices = [vocab[word] for word in tokens]
+                    input_tensor = torch.tensor(indices, device=device).unsqueeze(0)
+                    with torch.no_grad():
+                        outputs = model(input_tensor)
+                        sample_data.at[i, 'predicted'] = torch.sigmoid(outputs).item()
+                    # Show dataframe
+                st.dataframe(sample_data[['comment_text', target_label, 'predicted']].reset_index(drop=True), use_container_width=True, hide_index=True)
+
+                    
+                
+
     with tab_predict:
+        with st.spinner("Loading model..."):
+            model = load_model(target_label, device)
+            if model is None:
+                st.stop()
+            
         st.subheader("Predict Toxicity for Your Comment")
+        target_label = st.selectbox("Target Label", options=['toxic', 'severe_toxic', 'obscene', 'identity_hate', 'insult', 'threat'], index=0, key="target_label_predict")
         user_comment = st.text_area("Enter your comment here:", height=100, key="predict_text")
         predict_button = st.button("Predict Toxicity", key="predict_button")
+       
         if predict_button:
             # Load pretrained model and vocab
-            try:
-                # Use the selected target_label for model and vocab
-                model = load_model(target_label, device)
-                model.eval()
-                st.success("Pretrained model loaded successfully.")
-            except Exception as e:
-                st.error(f"Could not load pretrained model: {e}")
-                return
             if user_comment:
-                tokens = vocab.tokenize(user_comment)
-                if len(tokens) > max_seq_len_val:
-                    tokens = tokens[:max_seq_len_val]
-                else:
-                    tokens = tokens + [vocab.special_tokens[0]] * (max_seq_len_val - len(tokens))
-                indices = [vocab[word] for word in tokens]
-                input_tensor = torch.tensor(indices, device=device).unsqueeze(0)
-                outputs = model(input_tensor)
-                user_comment_predicted = torch.sigmoid(outputs).item()
-                st.write(f"Predicted Toxicity for Your Comment: {user_comment_predicted:.4f}")
+                with st.spinner("Analyzing comment..."):
+                    tokens = vocab.tokenize(user_comment)
+                    if len(tokens) > max_seq_len_val:
+                        tokens = tokens[:max_seq_len_val]
+                    else:
+                        tokens = tokens + [vocab.special_tokens[0]] * (max_seq_len_val - len(tokens))
+                    indices = [vocab[word] for word in tokens]
+                    input_tensor = torch.tensor(indices, device=device).unsqueeze(0)
+                    outputs = model(input_tensor)
+                    user_comment_predicted = torch.sigmoid(outputs).item()
+                    st.write(f"Predicted Toxicity for Your Comment: {user_comment_predicted:.4f}")
             else:
                 st.warning("Please enter a comment to predict its toxicity.")
+
+         # Show prediction probabilities on 5 target_label samples and 5 non-target_label samples
+        st.subheader("Sample Predictions")
+        sample_data = pd.concat([val_data[val_data[target_label] == 1].sample(5, random_state=42),
+                                val_data[val_data[target_label] == 0].sample(5, random_state=42)])
+        sample_data['predicted'] = 0.0
+        for i, row in sample_data.iterrows():
+            comment = row['comment_text']
+            tokens = vocab.tokenize(comment)
+            if len(tokens) > max_seq_len_val:
+                tokens = tokens[:max_seq_len_val]
+            else:
+                tokens = tokens + [vocab.special_tokens[0]] * (max_seq_len_val - len(tokens))
+            indices = [vocab[word] for word in tokens]
+            input_tensor = torch.tensor(indices, device=device).unsqueeze(0)
+            with torch.no_grad():
+                outputs = model(input_tensor)
+                sample_data.at[i, 'predicted'] = torch.sigmoid(outputs).item()
+            # Show dataframe
+        st.dataframe(sample_data[['comment_text', target_label, 'predicted']].reset_index(drop=True), use_container_width=True, hide_index=True)
+
 
 if __name__ == "__main__":
     main()
