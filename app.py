@@ -158,7 +158,7 @@ def main():
             st.header("Actions")
             train_button = st.button("Train Model", key="train_button")
             if st.button("Reset App State", key="reset_button"):
-                st.experimental_rerun()
+                st.rerun()
             st.subheader("Model Parameters")
             use_gpu = st.checkbox("Use GPU (if available)", value=True, key="use_gpu")
             quick_training_mode = st.checkbox("Dummy training mode", value=False, key="quick_training")
@@ -204,16 +204,6 @@ def main():
             if train_data is None or test_data is None:
                 st.stop()
 
-        class_counts = train_data[target_label].value_counts().sort_index()
-        class_df = pd.DataFrame({'class': ['non-'+target_label, target_label], 'count': [class_counts.get(0, 0), class_counts.get(1, 0)]})
-        with st.expander("View Class Distribution Chart", expanded=False):
-            st.bar_chart(class_df.set_index('class'), use_container_width=True)
-
-        # Preview a sample of the data
-        st.write("Sample Data")
-        st.dataframe(train_data.sample(100, random_state=42), use_container_width=True, hide_index=True, height=200)
-
-        with st.spinner("Processing data..."):            
             train_data, val_data = train_test_split(train_data, test_size=0.2, stratify=train_data[target_label], random_state=42)
             logger.info("Data split into training and validation sets")
 
@@ -247,6 +237,18 @@ def main():
 
             logger.info("Data loaded into DataLoader")
             st.success("Data loaded successfully")
+
+        class_counts = train_data[target_label].value_counts().sort_index()
+        class_df = pd.DataFrame({'class': ['non-'+target_label, target_label], 'count': [class_counts.get(0, 0), class_counts.get(1, 0)]})
+        c1, c2 = st.columns(2)
+        with c1:
+            st.bar_chart(class_df.set_index('class'), use_container_width=True)
+        with c2:
+            model_summary = model.__str__()
+            st.text_area("Model Summary", model_summary, height=200)
+        # Preview a sample of the data
+        st.write("Sample Data")
+        st.dataframe(train_data.sample(100, random_state=42), use_container_width=True, hide_index=True, height=280)
 
         # Train the model
         if train_button:
